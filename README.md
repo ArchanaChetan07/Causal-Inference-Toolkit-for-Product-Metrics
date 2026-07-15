@@ -10,30 +10,150 @@
 
 A production-oriented Python library that unifies **Difference-in-Differences**, **Synthetic Control**, and **Bayesian Structural Time Series** (CausalImpact-style) behind one estimator API, with pre-period diagnostics, placebo validation, and honest cross-method disagreement reporting.
 
-Built for the questions FAANG product / growth / ads / marketplace science teams actually ask when randomized experiments are unavailable, contaminated, or ethically constrained.
+Built for the questions FAANG product / growth / ads / marketplace science teams ask when A/B tests are unavailable, contaminated, or constrained.
+
+<p align="center">
+  <img src="assets/effect_comparison.png" alt="Cross-method ATT estimates vs true effect -8.0" width="820"/>
+</p>
 
 ---
 
-## The problem this solves
+## Results (validated on ground-truth panel)
 
-Shipping a regression coefficient labeled “causal effect” is easy. What Meta Core Data Science, Google Ads / Search causal teams, and Amazon Central Science optimize for is harder:
+Synthetic panel: **20 controls + 1 treated unit**, **40 periods**, intervention at **t=25**, documented ATT = **−8.0** (`seed=42`).
 
-| Failure mode | How this toolkit responds |
+Pre-trend diagnostic: **PASS** (interaction coef = 0.076, p = 0.813).
+
+### Cross-method estimates
+
+| Method | Estimate | 95% CI | Abs error vs −8.0 | True effect in CI |
+|---|---:|---|---:|:---:|
+| Difference-in-Differences | **−7.313** | [−9.293, −5.333] | 0.69 | PASS |
+| Synthetic Control | **−3.777** | [−8.596, 1.041] | 4.22 | PASS |
+| Bayesian Structural Time Series | **−8.236** | [−18.565, 1.674] | 0.24 | PASS |
+
+**Relative disagreement across methods: 69.2%** — surfaced explicitly instead of averaging incompatible answers.
+
+<p align="center">
+  <img src="assets/ground_truth_error.png" alt="Absolute error vs ground truth by method" width="720"/>
+</p>
+
+### Placebo credibility
+
+| Method | In-time placebo (fake t=12) | In-space pass rate |
+|---|---|---:|
+| DiD | **PASS** (effect = 0.96) | **85%** |
+| Synthetic Control | FAIL (effect = 4.27) | **75%** |
+| BSTS | FAIL (effect = −1.70) | **100%** |
+
+Threshold for “pass”: `|effect| < 1.5`. In-space tests drop the truly treated unit so its real shock cannot contaminate controls.
+
+<p align="center">
+  <img src="assets/placebo_pass_rates.png" alt="In-space placebo pass rates by method" width="720"/>
+</p>
+
+### Trajectories (actual vs counterfactual)
+
+Intervention marked at **t=25**. DiD shows treated vs control means; Synthetic Control and BSTS show the constructed / forecast counterfactual.
+
+<p align="center">
+  <img src="assets/trajectories.png" alt="DiD, Synthetic Control, and BSTS trajectory plots" width="980"/>
+</p>
+
+Regenerate figures anytime:
+
+```bash
+python examples/generate_readme_assets.py
+```
+
+---
+
+## System design
+
+### End-to-end pipeline
+
+```mermaid
+flowchart LR
+  A[Panel CSV / synthetic GT] --> B[Schema validation]
+  B --> C[Diagnostics]
+  C --> D[Donor pool]
+  D --> E1[DiD]
+  D --> E2[Synthetic Control]
+  D --> E3[BSTS]
+  E1 --> F[EffectEstimate]
+  E2 --> F
+  E3 --> F
+  F --> G[Disagreement report]
+  F --> H[Placebo suite]
+  G --> I[HTML report / API / Dashboard]
+  H --> I
+```
+
+### Component map
+
+```mermaid
+flowchart TB
+  subgraph Core["causal_toolkit"]
+    data[data.py]
+    diag[diagnostics.py]
+    est[estimators/]
+    plac[placebo.py]
+    rep[report.py]
+    api[api.py]
+  end
+  dash[dashboard/app.py]
+  demo[examples/run_demo.py]
+  ci[.github/workflows/ci.yml]
+
+  data --> diag
+  data --> est
+  diag --> rep
+  est --> plac
+  est --> rep
+  plac --> rep
+  rep --> api
+  rep --> dash
+  rep --> demo
+  api --> ci
+```
+
+### Estimator contract
+
+```mermaid
+classDiagram
+  class CausalEstimator {
+    <<abstract>>
+    +fit(df, treated_unit, intervention_time)
+    +effect() EffectEstimate
+    +plot(ax)
+  }
+  class DiDEstimator
+  class SyntheticControlEstimator
+  class BSTSEstimator
+  class EffectEstimate {
+    +point_estimate
+    +ci_lower
+    +ci_upper
+    +p_value
+    +diagnostics
+  }
+  CausalEstimator <|-- DiDEstimator
+  CausalEstimator <|-- SyntheticControlEstimator
+  CausalEstimator <|-- BSTSEstimator
+  CausalEstimator --> EffectEstimate
+```
+
+---
+
+## Why this exists
+
+| Failure mode | Toolkit response |
 |---|---|
-| Curve-fitting masquerading as causality | Ground-truth backtests with a **documented known effect** before trusting unknown data |
-| False positives on noisy panels | **In-time** and **in-space placebo tests** that should find ~0 when nothing happened |
-| Cherry-picking the flattering method | Runs DiD + SC + BSTS together and **surfaces disagreement explicitly** |
-| Silent assumption violations | Parallel-trends diagnostics, donor-pool selection, covariate balance |
-| Notebook-only science | FastAPI service, Streamlit UI, Docker, CI matrix, ≥90% coverage gate |
-
----
-
-## What you get
-
-- **Three estimators, one interface** — `fit()` / `effect()` / `plot()` for DiD, Synthetic Control, and BSTS
-- **Credibility layer** — parallel trends, donor ranking, in-time / in-space placebos, HTML comparison report
-- **Production surface** — FastAPI (`/estimate`, `/diagnostics`, `/placebo-test`, `/demo`), Streamlit dashboard, multi-stage non-root Docker image
-- **Engineering bar** — panel schema validation, upload size caps, structured 422 errors, `/health` + `/ready`, ruff + mypy + pytest CI on Python 3.9–3.12
+| Curve-fitting labeled “causal” | Ground-truth backtests with a **known ATT** |
+| False positives on noisy panels | **In-time** + **in-space** placebos |
+| Cherry-picking the flattering method | DiD + SC + BSTS with **explicit disagreement** |
+| Silent assumption breaks | Parallel trends, donor ranking, balance tables |
+| Notebook-only science | FastAPI, Streamlit, Docker, CI ≥90% coverage |
 
 ---
 
@@ -41,7 +161,7 @@ Shipping a regression coefficient labeled “causal effect” is easy. What Meta
 
 ```bash
 pip install -e ".[api,dashboard,dev]"
-python examples/run_demo.py          # writes reports/comparison_report.html
+python examples/run_demo.py          # -> reports/comparison_report.html
 pytest --cov=causal_toolkit          # CI fails under 90% coverage
 ```
 
@@ -58,87 +178,53 @@ comp = run_all_methods(
 
 for name, effect in comp["results"].items():
     print(effect.summary())
-
-print(f"Relative disagreement: {comp['disagreement']['relative_spread']:.1%}")
 ```
-
-Illustrative output on the built-in ground-truth panel (re-run locally for exact floats):
-
-```text
-difference_in_differences:           effect ≈ -7.3   (true effect in 95% CI)
-synthetic_control:                   effect ≈ -3.8   (biased on this DGP — reported)
-bayesian_structural_time_series:     effect ≈ -8.2   (closest to truth on this panel)
-Relative disagreement across methods: ~69%
-```
-
-That disagreement is a **feature**: the toolkit refuses to silently average incompatible answers.
 
 ---
 
-## Architecture
-
-```text
-causal_toolkit/
-├── data.py                  # Panel schema, validation, synthetic ground-truth generator
-├── diagnostics.py           # Parallel trends, donor pool, covariate balance
-├── estimators/
-│   ├── base.py              # CausalEstimator + EffectEstimate
-│   ├── did.py               # Classic treated × post DiD (HC1 robust SE)
-│   ├── synthetic_control.py # Abadie-style convex weights + placebo inference
-│   └── bsts.py              # Kalman local-level + donor regression (CausalImpact-style)
-├── placebo.py               # In-time / in-space placebo framework
-├── report.py                # Cross-method comparison + HTML report
-└── api.py                   # FastAPI service
-
-dashboard/app.py             # Streamlit interactive UI
-examples/run_demo.py         # End-to-end worked example
-tests/                       # Pytest suite (CI-gated)
-```
-
-Every estimator implements the same contract so reporting, placebos, and the API are method-agnostic.
-
----
-
-## Methods (and when to trust them)
+## Methods
 
 | Method | Estimator | Inference | Best when | Honest limitation |
 |---|---|---|---|---|
-| **DiD** | Classic `treated × post` OLS | HC1 robust SE | Clear treated / control groups, parallel trends plausible | Not Callaway–Sant’Anna; not full unit+time FE TWFE |
-| **Synthetic Control** | Nonnegative weights summing to 1 | In-space placebo permutation (Abadie) | One treated unit, strong pre-fit donors | Can bias under idiosyncratic noise-walks; conservative with small pools |
-| **BSTS** | Local-level + donor covariates (Kalman) | Forecast-variance CI (documented approx.) | Rich pre-period + donor time series | Not full MCMC posterior (PyMC roadmap) |
+| **DiD** | Classic `treated × post` OLS | HC1 robust SE | Clear groups, parallel trends | Not Callaway–Sant’Anna / full TWFE |
+| **Synthetic Control** | Nonnegative weights → 1 | In-space placebo (Abadie) | One treated unit, strong donors | Bias under idiosyncratic noise-walks |
+| **BSTS** | Local-level + donors (Kalman) | Forecast-variance CI (approx.) | Rich pre-period series | Not full MCMC posterior |
 
 ---
 
-## API & dashboard
+## API, dashboard, Docker
 
 ```bash
-# API
 uvicorn causal_toolkit.api:app --reload
-# Docs:   http://127.0.0.1:8000/docs
-# Live:   /health  /ready  /demo  /demo/report
-# Upload: POST /estimate | /diagnostics | /placebo-test
-#         (CSV: unit, time, outcome, treated, post)
+# /docs  /health  /ready  /demo  /demo/report
+# POST /estimate | /diagnostics | /placebo-test
 
-# Dashboard
 streamlit run dashboard/app.py
-```
 
-Upload limits: **25 MiB** / **500k rows**. The HTTP API has **no auth** — bind to localhost or put it behind a reverse proxy for anything beyond local demos.
-
-```bash
-docker build -t causal-toolkit .
-docker run --rm -p 8000:8000 causal-toolkit
 docker compose up --build
 ```
 
+Upload limits: **25 MiB** / **500k rows**. API has **no auth** — localhost or reverse-proxy only for non-demo use.
+
 ---
 
-## Design principles (portfolio signal)
+## Repository layout
 
-1. **Validate before you believe** — synthetic panels with known ATT, then placebos that must fail to “find” effects
-2. **Disagree in public** — cross-method spread is quantified and written into the HTML report
-3. **Name limitations** — approximate CIs, classic DiD scope, and SC bias modes are documented, not papered over
-4. **Ship like an internal library** — schema validation, typed package (`py.typed`), CI gates, non-root containers, readiness probes
+```text
+causal_toolkit/     # library: data, diagnostics, estimators, placebo, report, api
+dashboard/          # Streamlit UI
+examples/           # demo + README asset generator
+assets/             # published result figures
+tests/              # pytest suite (CI-gated)
+```
+
+| Path | Interview signal |
+|---|---|
+| `estimators/` | Shared abstraction + three real methods |
+| `placebo.py` | Credibility engineering, not just point estimates |
+| `report.py` | Forces honest multi-method comparison |
+| `api.py` + `Dockerfile` | Research code that runs as a service |
+| `assets/` + Results section | Reproducible evidence, not marketing claims |
 
 ---
 
@@ -146,26 +232,12 @@ docker compose up --build
 
 | Area | Status |
 |---|---|
-| Panel validation (schema, duplicates, treated constancy, size caps) | Done |
+| Panel validation + size caps | Done |
 | Diagnostics honor `treated_unit` | Done |
-| Donor pools exclude other treated units | Done |
-| Estimator / API error mapping (422 vs 500) | Done |
-| Upload size limits + logging | Done |
-| CI: ruff + mypy + pytest (3.9–3.12), coverage ≥90% | Done |
+| Donors exclude other treated units | Done |
+| API 422 mapping, logging, `/ready` | Done |
+| CI: ruff + mypy + pytest 3.9–3.12, coverage ≥90% | Done |
 | Multi-stage non-root Docker + HEALTHCHECK | Done |
-| Liveness `/health` + readiness `/ready` | Done |
-
----
-
-## Project structure for reviewers
-
-| Path | Why it matters in an interview |
-|---|---|
-| `estimators/` | Shared abstraction + three real methods, not three scripts |
-| `placebo.py` | Credibility engineering, not just point estimates |
-| `report.py` | Forces honest multi-method comparison |
-| `api.py` + `Dockerfile` | Research code that can run as a service |
-| `tests/` + `.github/workflows/ci.yml` | Regression safety and reproducible quality bar |
 
 ---
 
@@ -173,18 +245,14 @@ docker compose up --build
 
 - [ ] Callaway–Sant’Anna staggered DiD
 - [ ] Full PyMC / NumPyro MCMC backend for BSTS
-- [ ] California Prop 99 (or similar) public demo panel alongside the synthetic generator
-- [ ] Generalized synthetic control for multiple treated units
+- [ ] California Prop 99 public demo panel
+- [ ] Generalized synthetic control (multi-treated)
 - [ ] PyPI release
-
----
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
----
-
 ### Author
 
-Built as a portfolio demonstration of **applied causal inference + production Python** for product-metrics and experiment-science roles.
+Portfolio demonstration of **applied causal inference + production Python** for product-metrics and experiment-science roles.
