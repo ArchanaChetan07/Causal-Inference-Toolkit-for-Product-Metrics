@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 *.egg-info/
 build/
@@ -12,3 +13,5 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .DS_Store
+reports/*.html
+!reports/.gitkeep

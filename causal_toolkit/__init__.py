@@ -5,15 +5,15 @@ synthetic control, and Bayesian structural time series, with built-in
 pre-period diagnostics, placebo-test validation, and cross-method
 disagreement reporting.
 """
-from .data import make_ground_truth_dataset, load_csv, validate_panel, GroundTruthDataset
+from .data import GroundTruthDataset, load_csv, make_ground_truth_dataset, validate_panel
+from .diagnostics import covariate_balance, parallel_trends_test, select_donor_pool
+from .estimators.bsts import BSTSEstimator
 from .estimators.did import DiDEstimator
 from .estimators.synthetic_control import SyntheticControlEstimator
-from .estimators.bsts import BSTSEstimator
-from .diagnostics import parallel_trends_test, select_donor_pool, covariate_balance
-from .placebo import in_time_placebo, in_space_placebo, placebo_pass_rate
-from .report import run_all_methods, run_placebo_suite, render_html_report
+from .placebo import in_space_placebo, in_time_placebo, placebo_pass_rate
+from .report import render_html_report, run_all_methods, run_placebo_suite
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "make_ground_truth_dataset",

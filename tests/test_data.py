@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from causal_toolkit.data import make_ground_truth_dataset, validate_panel, SchemaError
+from causal_toolkit.data import SchemaError, make_ground_truth_dataset, validate_panel
 
 
 def test_ground_truth_dataset_shape():
@@ -32,9 +32,42 @@ def test_validate_panel_nan_outcome():
 
 
 def test_validate_panel_requires_untreated_donors():
-    df = pd.DataFrame({
-        "unit": ["a", "a"], "time": [0, 1], "outcome": [1.0, 2.0],
-        "treated": [1, 1], "post": [0, 1],
-    })
+    df = pd.DataFrame(
+        {
+            "unit": ["a", "a"],
+            "time": [0, 1],
+            "outcome": [1.0, 2.0],
+            "treated": [1, 1],
+            "post": [0, 1],
+        }
+    )
     with pytest.raises(SchemaError):
+        validate_panel(df)
+
+
+def test_validate_panel_rejects_duplicate_unit_time():
+    df = pd.DataFrame(
+        {
+            "unit": ["a", "a", "b", "b"],
+            "time": [0, 0, 0, 1],
+            "outcome": [1.0, 2.0, 3.0, 4.0],
+            "treated": [1, 1, 0, 0],
+            "post": [0, 0, 0, 1],
+        }
+    )
+    with pytest.raises(SchemaError, match="duplicate"):
+        validate_panel(df)
+
+
+def test_validate_panel_rejects_inconsistent_treated_flag():
+    df = pd.DataFrame(
+        {
+            "unit": ["a", "a", "b", "b"],
+            "time": [0, 1, 0, 1],
+            "outcome": [1.0, 2.0, 3.0, 4.0],
+            "treated": [1, 0, 0, 0],
+            "post": [0, 1, 0, 1],
+        }
+    )
+    with pytest.raises(SchemaError, match="constant"):
         validate_panel(df)

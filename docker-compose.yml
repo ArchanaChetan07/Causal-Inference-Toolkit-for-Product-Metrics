@@ -4,11 +4,35 @@ services:
     ports:
       - "8000:8000"
     command: ["uvicorn", "causal_toolkit.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # Bind to localhost on the host by default for safer local demos:
+    # change to "8000:8000" only if you intentionally expose the API.
 
   dashboard:
     build: .
     ports:
       - "8501:8501"
-    command: ["streamlit", "run", "dashboard/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
-    depends_on:
-      - api
+    command:
+      [
+        "streamlit",
+        "run",
+        "dashboard/app.py",
+        "--server.address",
+        "0.0.0.0",
+        "--server.port",
+        "8501",
+        "--server.headless",
+        "true",
+      ]
+    # Dashboard is self-contained (does not call the API service).

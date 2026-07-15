@@ -1,7 +1,6 @@
-import os
 
 from causal_toolkit.data import make_ground_truth_dataset
-from causal_toolkit.report import run_all_methods, run_placebo_suite, render_html_report
+from causal_toolkit.report import render_html_report, run_all_methods, run_placebo_suite
 
 
 def test_run_all_methods_returns_three_results():

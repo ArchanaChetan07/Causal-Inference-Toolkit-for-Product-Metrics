@@ -12,12 +12,16 @@ Panel schema (long format), required columns:
 """
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
 from dataclasses import dataclass
 
+import numpy as np
+import pandas as pd
 
 REQUIRED_COLUMNS = ["unit", "time", "outcome", "treated", "post"]
+
+# Soft caps for API / production workloads (rows = units × periods)
+MAX_PANEL_ROWS = 500_000
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MiB
 
 
 class SchemaError(ValueError):
@@ -34,15 +38,43 @@ def validate_panel(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise SchemaError(f"Panel is missing required columns: {missing}")
 
+    if len(df) == 0:
+        raise SchemaError("Panel is empty.")
+
+    if len(df) > MAX_PANEL_ROWS:
+        raise SchemaError(
+            f"Panel has {len(df)} rows; maximum allowed is {MAX_PANEL_ROWS}."
+        )
+
     if df["outcome"].isna().any():
-        n = df["outcome"].isna().sum()
+        n = int(df["outcome"].isna().sum())
         raise SchemaError(f"Panel has {n} missing outcome values; impute or drop first.")
 
-    if not set(df["treated"].unique()).issubset({0, 1}):
+    if not pd.api.types.is_numeric_dtype(df["outcome"]):
+        raise SchemaError("`outcome` must be numeric.")
+
+    if not pd.api.types.is_numeric_dtype(df["time"]):
+        raise SchemaError("`time` must be numeric.")
+
+    treated_vals = set(pd.Series(df["treated"]).dropna().unique().tolist())
+    if not treated_vals.issubset({0, 1}):
         raise SchemaError("`treated` column must be binary (0/1).")
 
-    if not set(df["post"].unique()).issubset({0, 1}):
+    post_vals = set(pd.Series(df["post"]).dropna().unique().tolist())
+    if not post_vals.issubset({0, 1}):
         raise SchemaError("`post` column must be binary (0/1).")
+
+    if df.duplicated(subset=["unit", "time"]).any():
+        n = int(df.duplicated(subset=["unit", "time"]).sum())
+        raise SchemaError(f"Panel has {n} duplicate (unit, time) rows.")
+
+    # treated flag must be constant within each unit
+    treated_nunique = df.groupby("unit")["treated"].nunique()
+    bad_units = treated_nunique[treated_nunique > 1].index.tolist()
+    if bad_units:
+        raise SchemaError(
+            f"`treated` must be constant within each unit; inconsistent units: {bad_units[:5]}"
+        )
 
     n_units = df["unit"].nunique()
     n_treated = df.loc[df["treated"] == 1, "unit"].nunique()
@@ -54,6 +86,28 @@ def validate_panel(df: pd.DataFrame) -> pd.DataFrame:
     return df.sort_values(["unit", "time"]).reset_index(drop=True)
 
 
+def assert_fit_inputs(
+    df: pd.DataFrame,
+    treated_unit: str,
+    intervention_time: int | float,
+) -> None:
+    """Validate estimator fit arguments against an already-validated panel."""
+    if treated_unit not in set(df["unit"].unique()):
+        raise SchemaError(f"Treated unit '{treated_unit}' not found in panel.")
+    times = df["time"]
+    t_min, t_max = times.min(), times.max()
+    if not (t_min <= intervention_time <= t_max):
+        raise SchemaError(
+            f"intervention_time={intervention_time} is outside panel time range [{t_min}, {t_max}]."
+        )
+    n_pre = int((df["time"] < intervention_time).sum())
+    n_post = int((df["time"] >= intervention_time).sum())
+    if n_pre == 0:
+        raise SchemaError("No pre-intervention observations; cannot fit counterfactual.")
+    if n_post == 0:
+        raise SchemaError("No post-intervention observations; cannot estimate an effect.")
+
+
 @dataclass
 class GroundTruthDataset:
     """A synthetic panel with a documented, known causal effect.
@@ -62,6 +116,7 @@ class GroundTruthDataset:
     so the toolkit's estimators can be backtested against a KNOWN answer
     before being trusted on real, unknown-effect data.
     """
+
     df: pd.DataFrame
     true_effect: float
     treated_unit: str

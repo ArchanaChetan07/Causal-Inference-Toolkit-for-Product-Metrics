@@ -21,17 +21,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install package + dev deps
+      - name: Install package + API + dev deps
         run: pip install -e ".[api,dev]"
 
       - name: Lint (ruff)
-        run: ruff check causal_toolkit tests || true
+        run: ruff check causal_toolkit tests
 
       - name: Type check (mypy)
-        run: mypy causal_toolkit --ignore-missing-imports || true
+        run: mypy causal_toolkit --ignore-missing-imports
 
       - name: Run tests with coverage
-        run: pytest --cov=causal_toolkit --cov-report=xml --cov-report=term-missing --cov-fail-under=85
+        run: pytest --cov=causal_toolkit --cov-report=xml --cov-report=term-missing --cov-fail-under=90
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -51,6 +51,10 @@ jobs:
         run: |
           pip install build
           python -m build
+      - name: Smoke-install wheel
+        run: |
+          pip install dist/*.whl
+          python -c "from causal_toolkit import __version__, run_all_methods; print(__version__)"
       - name: Upload dist
         uses: actions/upload-artifact@v4
         with:

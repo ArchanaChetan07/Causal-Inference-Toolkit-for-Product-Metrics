@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
 import pandas as pd
 
@@ -17,9 +16,9 @@ import pandas as pd
 class EffectEstimate:
     method: str
     point_estimate: float
-    ci_lower: Optional[float] = None
-    ci_upper: Optional[float] = None
-    p_value: Optional[float] = None
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    p_value: float | None = None
     diagnostics: dict = field(default_factory=dict)
 
     def summary(self) -> str:
@@ -39,7 +38,7 @@ class CausalEstimator(ABC):
 
     def __init__(self):
         self._fitted = False
-        self._result: Optional[EffectEstimate] = None
+        self._result: EffectEstimate | None = None
 
     @abstractmethod
     def fit(
@@ -48,7 +47,7 @@ class CausalEstimator(ABC):
         treated_unit: str,
         intervention_time: int,
         **kwargs,
-    ) -> "CausalEstimator":
+    ) -> CausalEstimator:
         ...
 
     def effect(self) -> EffectEstimate:

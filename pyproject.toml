@@ -4,28 +4,63 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "causal-toolkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "A validated multi-method causal impact library: DiD, synthetic control, and Bayesian structural time series, with placebo-test validation and cross-method disagreement reporting."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "Portfolio Project 4" }]
+authors = [{ name = "Archana Chetan" }]
+keywords = ["causal-inference", "difference-in-differences", "synthetic-control", "bsts", "product-metrics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 dependencies = [
     "pandas>=1.5",
     "numpy>=1.23",
     "scipy>=1.9",
     "statsmodels>=0.14",
     "matplotlib>=3.6",
-    "scikit-learn>=1.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ArchanaChetan07/Causal-Inference-Toolkit-for-Product-Metrics"
+Repository = "https://github.com/ArchanaChetan07/Causal-Inference-Toolkit-for-Product-Metrics"
+Issues = "https://github.com/ArchanaChetan07/Causal-Inference-Toolkit-for-Product-Metrics/issues"
 
 [project.optional-dependencies]
 api = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "python-multipart"]
-dashboard = ["streamlit>=1.30", "plotly>=5.18"]
-dev = ["pytest>=7.4", "pytest-cov>=4.1", "black", "ruff", "mypy", "httpx"]
+dashboard = ["streamlit>=1.30"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "black", "ruff", "mypy", "httpx", "pandas-stubs", "types-requests"]
 
 [tool.setuptools.packages.find]
 include = ["causal_toolkit*"]
 
+[tool.setuptools.package-data]
+causal_toolkit = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+follow_imports = "silent"
+check_untyped_defs = true

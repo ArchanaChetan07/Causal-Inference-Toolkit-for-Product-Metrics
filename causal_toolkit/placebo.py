@@ -7,13 +7,12 @@ regardless of how good its ground-truth backtest looked once.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Type, List
 
-import numpy as np
 import pandas as pd
 
-from .estimators.base import CausalEstimator
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,7 +24,7 @@ class PlaceboResult:
 
 
 def in_time_placebo(
-    estimator_cls: Type[CausalEstimator],
+    estimator_cls: type,
     df: pd.DataFrame,
     treated_unit: str,
     true_intervention_time: int,
@@ -36,23 +35,27 @@ def in_time_placebo(
     """Re-run the estimator with a FAKE intervention time strictly before
     the true one. A well-behaved estimator should find ~0 effect.
     """
-    assert fake_intervention_time < true_intervention_time, "Fake time must precede the real intervention."
+    if fake_intervention_time >= true_intervention_time:
+        raise ValueError(
+            f"Fake intervention time ({fake_intervention_time}) must precede "
+            f"the real intervention ({true_intervention_time})."
+        )
     pre_only = df[df["time"] < true_intervention_time]
     est = estimator_cls()
     est.fit(pre_only, treated_unit=treated_unit, intervention_time=fake_intervention_time, **fit_kwargs)
     effect = est.effect().point_estimate
     passed = abs(effect) < threshold
-    return PlaceboResult("in_time", str(fake_intervention_time), effect, passed)
+    return PlaceboResult("in_time", str(fake_intervention_time), float(effect), passed)
 
 
 def in_space_placebo(
-    estimator_cls: Type[CausalEstimator],
+    estimator_cls: type,
     df: pd.DataFrame,
     true_treated_unit: str,
     intervention_time: int,
     threshold: float,
     **fit_kwargs,
-) -> List[PlaceboResult]:
+) -> list[PlaceboResult]:
     """Re-run the estimator pretending each CONTROL unit was treated.
     A well-behaved estimator should find ~0 effect for these fake
     "treated" units, since they were never actually intervened on.
@@ -64,26 +67,30 @@ def in_space_placebo(
     panel = df[df["unit"] != true_treated_unit].copy()
     fit_kwargs = dict(fit_kwargs)
     donor_units = fit_kwargs.pop("donor_units", None)
-    results = []
+    results: list[PlaceboResult] = []
     for fake_unit in control_units:
         donors = None
         if donor_units is not None:
             donors = [d for d in donor_units if d != fake_unit and d != true_treated_unit]
-        est = estimator_cls()
-        est.fit(
-            panel,
-            treated_unit=fake_unit,
-            intervention_time=intervention_time,
-            donor_units=donors,
-            **fit_kwargs,
-        )
-        effect = est.effect().point_estimate
-        passed = abs(effect) < threshold
-        results.append(PlaceboResult("in_space", fake_unit, effect, passed))
+        try:
+            est = estimator_cls()
+            est.fit(
+                panel,
+                treated_unit=fake_unit,
+                intervention_time=intervention_time,
+                donor_units=donors,
+                **fit_kwargs,
+            )
+            effect = float(est.effect().point_estimate)
+            passed = abs(effect) < threshold
+            results.append(PlaceboResult("in_space", str(fake_unit), effect, passed))
+        except Exception as exc:  # noqa: BLE001 — record failure as failed placebo
+            logger.warning("In-space placebo failed for %s: %s", fake_unit, exc)
+            results.append(PlaceboResult("in_space", str(fake_unit), float("nan"), False))
     return results
 
 
-def placebo_pass_rate(results: List[PlaceboResult]) -> float:
+def placebo_pass_rate(results: list[PlaceboResult]) -> float:
     if not results:
         return float("nan")
     return sum(r.passed for r in results) / len(results)

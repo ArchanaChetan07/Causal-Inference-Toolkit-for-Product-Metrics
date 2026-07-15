@@ -4,12 +4,14 @@ report -- exactly what `Success Metrics` in the project spec asks for.
 
 Run with:  python examples/run_demo.py
 """
+from pathlib import Path
+
 from causal_toolkit import (
     make_ground_truth_dataset,
     parallel_trends_test,
+    render_html_report,
     run_all_methods,
     run_placebo_suite,
-    render_html_report,
 )
 
 
@@ -18,7 +20,7 @@ def main():
     print(gt.description)
     print()
 
-    trend = parallel_trends_test(gt.df, gt.intervention_time)
+    trend = parallel_trends_test(gt.df, gt.intervention_time, treated_unit=gt.treated_unit)
     print("Pre-period diagnostic:", trend.message)
     print()
 
@@ -32,21 +34,30 @@ def main():
     print("=== Ground-truth validation ===")
     for name, check in comp["ground_truth_check"].items():
         status = "PASS" if check["within_ci"] else "MISS"
-        print(f"  {name}: est={check['estimate']:.2f} true={check['true_effect']:.2f} "
-              f"abs_error={check['abs_error']:.2f} [{status}]")
+        print(
+            f"  {name}: est={check['estimate']:.2f} true={check['true_effect']:.2f} "
+            f"abs_error={check['abs_error']:.2f} [{status}]"
+        )
     print()
 
     print("=== Placebo validation ===")
     placebo = run_placebo_suite(
-        gt.df, gt.treated_unit, gt.intervention_time,
-        fake_intervention_time=gt.intervention_time // 2, threshold=1.5,
+        gt.df,
+        gt.treated_unit,
+        gt.intervention_time,
+        fake_intervention_time=gt.intervention_time // 2,
+        threshold=1.5,
     )
     for name, res in placebo.items():
-        print(f"  {name}: in-time effect={res['in_time'].estimated_effect:.2f} "
-              f"({'PASS' if res['in_time'].passed else 'FAIL'}), "
-              f"in-space pass rate={res['in_space_pass_rate']:.0%}")
+        print(
+            f"  {name}: in-time effect={res['in_time'].estimated_effect:.2f} "
+            f"({'PASS' if res['in_time'].passed else 'FAIL'}), "
+            f"in-space pass rate={res['in_space_pass_rate']:.0%}"
+        )
 
-    out = render_html_report(comp, placebo, "reports/comparison_report.html")
+    out_dir = Path("reports")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = render_html_report(comp, placebo, str(out_dir / "comparison_report.html"))
     print(f"\nFull HTML report written to: {out}")
 
 
