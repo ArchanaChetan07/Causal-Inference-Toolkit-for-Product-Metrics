@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "causal-toolkit"
+version = "0.1.0"
+description = "A validated multi-method causal impact library: DiD, synthetic control, and Bayesian structural time series, with placebo-test validation and cross-method disagreement reporting."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Portfolio Project 4" }]
+dependencies = [
+    "pandas>=1.5",
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "statsmodels>=0.14",
+    "matplotlib>=3.6",
+    "scikit-learn>=1.2",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "python-multipart"]
+dashboard = ["streamlit>=1.30", "plotly>=5.18"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "black", "ruff", "mypy", "httpx"]
+
+[tool.setuptools.packages.find]
+include = ["causal_toolkit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
